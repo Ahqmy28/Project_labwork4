@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='UTF-8'>
+<title>Labwork4 CE28_30_32</title>
+<script src='https://cdn.jsdelivr.net/npm/chart.js'></script>
+
+<style>
+body{
+    margin:0;
+    font-family: Courier, monospace;
+    background: #89634c;
+    display:flex;
+    justify-content:center;
+    padding:40px;
+    color:#067578;
+}
+
+.container{
+    width:80%;
+    background:#e3fff9;
+    padding:30px;
+    border-radius:10px;
+}
+
+header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:25px;
+}
+
+h1{
+    font-weight:600;
+    font-size:300%;
+    color:#883d0f;
+}
+
+.status{
+    display:flex;
+    align-items:center;
+    gap:15px;
+}
+
+.led{
+    width:16px;
+    height:16px;
+    border-radius:100%;
+    background:#bae4df;
+    transition:.3s;
+}
+
+.led.on{
+    background:#00ff33;
+}
+
+button{
+    background:#87edd8;
+    border:none;
+    padding:5px 10px;
+    border-radius:5px;
+    cursor:pointer;
+    font-weight:600;
+    color:#067578;
+    transition:.3s;
+}
+
+button:hover{
+    background:#00cb9f;
+    transform:scale(1.05);
+}
+
+.values{
+    display:flex;
+    justify-content:space-around;
+    margin-bottom:20px;
+    font-size:110%;
+}
+
+.value-card{
+    background:#87edd8;
+    padding:7px 20px;
+    box-shadow:0 5px 15px rgba(28, 85, 132, 0.149);
+}
+
+.value-card span{
+    font-weight:700;
+    margin-left:5px;
+}
+
+canvas{
+    height:450px !important;
+}
+
+.custom-legend{
+    display:flex;
+    justify-content:center;
+    gap:30px;
+    margin-top:15px;
+    font-size:85%;
+}
+
+.legend-item{
+    display:flex;
+    align-items:center;
+    gap:8px;
+}
+
+.color-dot{
+    width:14px;
+    height:14px;
+    border-radius:100%;
+}
+
+</style>
+</head>
+
+<body>
+<div class='container'>
+<header>
+    <h1>ESP32 Monitor</h1>
+    <div class='status'>
+        <div id='led' class='led'></div>
+        <span id='ledText'>LED OFF</span>
+        <button id="connectBtn">Connect</button>
+    </div>
+</header>
+
+<div class="values">
+    <div class="value-card">Touch: <span id="touchVal">--</span></div>
+    <div class="value-card">Temp °C: <span id="tempVal">--</span></div>
+    <div class="value-card">Humidity %: <span id="humidVal">--</span></div>
+</div>
+
+<canvas id="mainChart"></canvas>
+
+<div class="custom-legend">
+    <div class="legend-item">
+        <div class="color-dot" style="background:#883d0f;"></div>
+        Touch
+    </div>
+    <div class="legend-item">
+        <div class="color-dot" style="background:#2fa003;"></div>
+        Temperature
+    </div>
+    <div class="legend-item">
+        <div class="color-dot" style="background:#1fdcb6;"></div>
+        Humidity
+    </div>
+</div>
+
+</div>
+
+<script>
+let port, reader;
+const threshold = 300;
+const maxPoints = 30;
+
+const chart = new Chart(document.getElementById('mainChart'), {
+    type:'line',
+    data:{
+        labels:Array(maxPoints).fill(''),
+        datasets:[
+            {
+                label:'Touch',
+                borderColor:'#883d0f',
+                backgroundColor:'rgba(136, 61, 15, 0.1)',
+                data:Array(maxPoints).fill(null),
+                tension:0.4,
+                borderWidth:3,
+                pointRadius:0
+            },
+            {
+                label:'Temperature °C',
+                borderColor:'#2fa003',
+                backgroundColor:'rgba(47, 160, 3, 0.1)',
+                data:Array(maxPoints).fill(null),
+                tension:0.4,
+                borderWidth:3,
+                pointRadius:0
+            },
+            {
+                label:'Humidity %',
+                borderColor:'#1fdcb6',
+                backgroundColor:'rgba(31, 220, 182, 0.1)',
+                data:Array(maxPoints).fill(null),
+                tension:0.4,
+                borderWidth:3,
+                pointRadius:0
+            }
+        ]
+    },
+    options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        animation:false,
+        plugins:{
+            legend:{ display:false }
+        },
+        scales:{
+            x:{ display:false },
+            y:{
+                ticks:{ color:'#067578' },
+                grid:{ color:'rgba(0, 153, 128, 0.25)' }
+            }
+        }
+    }
+});
+
+document.getElementById('connectBtn').addEventListener('click', async ()=>{
+    try{
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate:115200 });
+        document.getElementById('connectBtn').style.display="none";
+
+        const decoder = new TextDecoderStream();
+        port.readable.pipeTo(decoder.writable);
+        reader = decoder.readable.getReader();
+        readLoop();
+    }catch(e){ console.error(e); }
+});
+
+async function readLoop(){
+    let buffer="";
+    while(true){
+        const {value,done}=await reader.read();
+        if(done) break;
+        buffer+=value;
+        let lines=buffer.split("\n");
+        buffer=lines.pop();
+
+        for(let line of lines){
+            let parts=line.trim().split(",");
+            if(parts.length===3){
+                const t=parseFloat(parts[0]);
+                const te=parseFloat(parts[1]);
+                const h=parseFloat(parts[2]);
+
+                document.getElementById('touchVal').innerText=t;
+                document.getElementById('tempVal').innerText=te;
+                document.getElementById('humidVal').innerText=h;
+
+                const led=document.getElementById('led');
+                const ledText=document.getElementById('ledText');
+                if(t < threshold){
+                    led.classList.add('on');
+                    ledText.innerText="ON";
+                }else{
+                    led.classList.remove('on');
+                    ledText.innerText="OFF";
+                }
+
+                updateChart(0,t);
+                updateChart(1,te);
+                updateChart(2,h);
+            }
+        }
+    }
+}
+
+function updateChart(index,val){
+    chart.data.datasets[index].data.push(val);
+    chart.data.datasets[index].data.shift();
+    chart.update('none');
+}
+</script>
+</body>
+</html>
