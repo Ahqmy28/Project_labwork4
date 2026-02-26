@@ -1,2 +1,2 @@
 # Project_labwork4
-This project is made for Labwork4
+This project involved both hardware and software in a system. The hardware will detect touch input, and when the sensor is touched, the light bulb turns on automatically. At the same time, the SHT21 sensor measures temperature and humidity data. The ESP32 processes the data then sends it to the web application. The measured temperature and humidity values will be displayed as graphs on the website, allowing users to monitor environmental conditions in real time.
